@@ -24,6 +24,10 @@ module Sensu::Extension
       # NOTE: Making sure we do not get any data from the Main
     end
 
+    def connection(influx_url)
+      @pipe_connection ||= EventMachine::HttpRequest.new(influx_url)
+    end
+
     def run(event_data)
       data = parse_event(event_data)
       data["output"].split(/\n/).each do |line|
@@ -49,9 +53,34 @@ module Sensu::Extension
           protocol = "https"
         end
         
-        EventMachine::HttpRequest.new("#{ protocol }://#{ settings["host"] }:#{ settings["port"] }/db/#{ database }/series?u=#{ settings["user"] }&p=#{ settings["password"] }").post :head => { "content-type" => "application/x-www-form-urlencoded" }, :body => body.to_json
-
+	influx_url = "#{ protocol  }://#{ settings['host']  }:#{ settings['port']  }/db/#{ database  }/series?u=#{ settings['user'] }&p=#{ settings['password'] }"
+	begin
+	  conn = connection(influx_url).post :head => { "content-type" => "application/x-www-form-urlencoded" }, :body => body.to_json, :keepalive => true
+          puts '############## Connection POST #######################'
+          puts conn
+          puts body.to_json
+          puts '############## Connection POST #######################'
+	rescue => e
+	  puts "Error on conection #{e}"
+	end
       end
+      conn.callback do |response|
+        if response[:status] != 200
+          puts "ERRRRRRRRRRRRRRRRRRRRROOOOOOOOOOOO NO CALLLLLLLLLLLLBACKKKKKKKKKKKKKKKKKK"
+          puts response
+          puts "ERRRRRRRRRRRRRRRRRRRRROOOOOOOOOOOO NO CALLLLLLLLLLLLBACKKKKKKKKKKKKKKKKKK"
+        end
+      end
+
+      conn.errback do |response|
+        if response[:error]
+          puts "ERRRRRRRRRRRRRRRRRRRRROOOOOOOOOOOO NO ERRRRRRRRRRRBACKKKKKKKKKKKKKKKKKK"
+          puts "Erro on connection  #{conn.errors}"
+          puts "ERRRRRRRRRRRRRRRRRRRRROOOOOOOOOOOO NO ERRRRRRRRRRRBACKKKKKKKKKKKKKKKKKK"
+        end
+      end
+
+      conn.close  
     end
 
     private
